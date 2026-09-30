@@ -4,15 +4,15 @@ import Dexie, { type Table } from 'dexie'
 import type { CollectPoint, FungusRecord, IdentifyLog, SporePrint } from '@/types'
 
 /** IndexedDB 数据结构版本号 */
-export const SCHEMA_VERSION = 2
+export const SCHEMA_VERSION = 3
 
 export interface MetaRow {
   key: string
-  value: number
+  value: unknown
 }
 
 /** Dexie 封装：条目 / 孢子印 / 采集点 / 鉴定结论 四张表 + 元数据表 */
-class FungiGuideDb extends Dexie {
+export class FungiGuideDb extends Dexie {
   records!: Table<FungusRecord, string>
   spores!: Table<SporePrint, string>
   points!: Table<CollectPoint, string>
@@ -29,7 +29,7 @@ class FungiGuideDb extends Dexie {
       meta: 'key'
     })
     // v2：新增「菌肉变色反应」字段，迁移时为历史条目补齐默认值（不变色）
-    this.version(SCHEMA_VERSION)
+    this.version(2)
       .stores({
         records: 'id, code, pointId, attachment, capShape',
         spores: 'id, recordId, color, observeDate',
@@ -44,6 +44,25 @@ class FungiGuideDb extends Dexie {
           .modify((record) => {
             if (!record.fleshReaction) {
               record.fleshReaction = '不变色'
+            }
+          })
+      })
+    // v3：采集点新增「编号前缀」字段，迁移时为历史采集点补齐默认值（空，运行时从 id 推导）
+    this.version(SCHEMA_VERSION)
+      .stores({
+        records: 'id, code, pointId, attachment, capShape',
+        spores: 'id, recordId, color, observeDate',
+        points: 'id, name, substrate, vegetation, code',
+        identifies: 'id, recordId, conclusion, date',
+        meta: 'key'
+      })
+      .upgrade(async (tx) => {
+        await tx
+          .table<CollectPoint, string>('points')
+          .toCollection()
+          .modify((point) => {
+            if (point.code === undefined || point.code === null) {
+              point.code = ''
             }
           })
       })
@@ -93,6 +112,7 @@ export async function seedDemoData(): Promise<void> {
     {
       id: 'pt_bhs',
       name: '百花山栎树林样线',
+      code: 'BHS',
       longitude: 115.6218,
       latitude: 39.8152,
       altitude: 1420,
@@ -105,6 +125,7 @@ export async function seedDemoData(): Promise<void> {
     {
       id: 'pt_yls',
       name: '云龙山腐木沟',
+      code: 'YLS',
       longitude: 117.2841,
       latitude: 34.2615,
       altitude: 260,
@@ -118,7 +139,7 @@ export async function seedDemoData(): Promise<void> {
 
   await db.records.bulkPut([
     {
-      id: 'rec_001',
+      id: 'BHS-2026-001',
       code: 'BHS-2026-001',
       tempName: '橙黄牛肝菌（暂定）',
       fruitBodyCount: 3,
@@ -142,7 +163,7 @@ export async function seedDemoData(): Promise<void> {
       note: '菌管层易剥离，仅作形态记录'
     },
     {
-      id: 'rec_002',
+      id: 'BHS-2026-002',
       code: 'BHS-2026-002',
       tempName: '灰紫小伞（暂定）',
       fruitBodyCount: 6,
@@ -166,7 +187,7 @@ export async function seedDemoData(): Promise<void> {
       note: '菌褶边缘略带紫晕'
     },
     {
-      id: 'rec_003',
+      id: 'YLS-2026-001',
       code: 'YLS-2026-001',
       tempName: '褐褶韧革菌（暂定）',
       fruitBodyCount: 2,
@@ -194,7 +215,7 @@ export async function seedDemoData(): Promise<void> {
   await db.spores.bulkPut([
     {
       id: 'spo_001',
-      recordId: 'rec_001',
+      recordId: 'BHS-2026-001',
       color: '淡黄',
       shape: '圆形印痕，边缘略散',
       hours: 12,
@@ -203,7 +224,7 @@ export async function seedDemoData(): Promise<void> {
     },
     {
       id: 'spo_002',
-      recordId: 'rec_002',
+      recordId: 'BHS-2026-002',
       color: '白色',
       shape: '圆形印痕，中心致密',
       hours: 8,
@@ -212,7 +233,7 @@ export async function seedDemoData(): Promise<void> {
     },
     {
       id: 'spo_003',
-      recordId: 'rec_003',
+      recordId: 'YLS-2026-001',
       color: '粉褐',
       shape: '不规则印痕',
       hours: 24,
@@ -224,7 +245,7 @@ export async function seedDemoData(): Promise<void> {
   await db.identifies.bulkPut([
     {
       id: 'idf_001',
-      recordId: 'rec_001',
+      recordId: 'BHS-2026-001',
       conclusion: 'Boletus sp.',
       basis: '形态特征',
       referenceBook: '《中国大型真菌》',
@@ -236,7 +257,7 @@ export async function seedDemoData(): Promise<void> {
     },
     {
       id: 'idf_002',
-      recordId: 'rec_002',
+      recordId: 'BHS-2026-002',
       conclusion: 'Lepista sordida',
       basis: '孢子印',
       referenceBook: '《菌物图鉴》',

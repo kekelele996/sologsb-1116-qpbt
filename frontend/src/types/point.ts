@@ -10,6 +10,8 @@ export type Substrate = (typeof SUBSTRATES)[number]
 export interface CollectPoint {
   id: string
   name: string
+  /** 编号前缀（正式编号的第一段，如 BHS）；留空时从 id 推导 */
+  code: string
   longitude: number
   latitude: number
   altitude: number

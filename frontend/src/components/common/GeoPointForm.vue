@@ -41,6 +41,15 @@ const coordError = computed<string | null>(() => {
         />
       </label>
       <label class="cell">
+        <span class="lab">编号前缀</span>
+        <el-input
+          :model-value="modelValue.code"
+          :disabled="disabled"
+          placeholder="如 BHS，留空则从 id 推导"
+          @update:model-value="(value: string) => patch({ code: value })"
+        />
+      </label>
+      <label class="cell">
         <span class="lab">经度</span>
         <el-input-number
           :model-value="modelValue.longitude"

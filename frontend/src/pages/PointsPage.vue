@@ -15,6 +15,7 @@ const editingId = ref<string | null>(null)
 const draft = reactive<CollectPoint>({
   id: '',
   name: '',
+  code: '',
   longitude: 116.4,
   latitude: 39.9,
   altitude: 800,
@@ -46,6 +47,7 @@ function resetDraft(): void {
   editingId.value = null
   draft.id = ''
   draft.name = ''
+  draft.code = ''
   draft.longitude = 116.4
   draft.latitude = 39.9
   draft.altitude = 800
@@ -70,10 +72,16 @@ async function submit(): Promise<void> {
     ElMessage.warning(coordError.value)
     return
   }
+  const code = draft.code.trim().toUpperCase()
+  if (code && pointState.points.some((p) => p.id !== editingId.value && p.code.trim().toUpperCase() === code)) {
+    ElMessage.warning(`编号前缀「${code}」已被其他采集点使用，请换一个`)
+    return
+  }
   const row: CollectPoint = {
     ...draft,
     id: editingId.value ?? uid('pt'),
     name: draft.name.trim(),
+    code,
     companionTrees: draft.companionTrees.trim(),
     collector: draft.collector.trim()
   }
