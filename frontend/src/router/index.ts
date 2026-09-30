@@ -21,6 +21,12 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '采集点管理' }
   },
   {
+    path: '/field',
+    name: 'field',
+    component: () => import('@/pages/FieldPage.vue'),
+    meta: { title: '外业手记并入' }
+  },
+  {
     path: '/identify',
     name: 'identify',
     component: () => import('@/pages/IdentifyPage.vue'),

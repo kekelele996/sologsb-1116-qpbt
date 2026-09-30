@@ -1,22 +1,36 @@
 import { onUnmounted, reactive } from 'vue'
 import type { StoreApi } from 'zustand/vanilla'
 import Dexie, { type Table } from 'dexie'
-import type { CollectPoint, FungusRecord, IdentifyLog, SporePrint } from '@/types'
+import type {
+  CollectPoint,
+  FieldIdentifyLog,
+  FieldNote,
+  FieldSporePrint,
+  FungusRecord,
+  IdentifyLog,
+  MergeJob,
+  SporePrint
+} from '@/types'
+import { parseFormalCode } from '@/utils/renumber'
 
 /** IndexedDB 数据结构版本号 */
-export const SCHEMA_VERSION = 2
+export const SCHEMA_VERSION = 3
 
 export interface MetaRow {
   key: string
   value: number
 }
 
-/** Dexie 封装：条目 / 孢子印 / 采集点 / 鉴定结论 四张表 + 元数据表 */
+/** Dexie 封装：条目 / 孢子印 / 采集点 / 鉴定结论 四张表 + 外业手记三表 + 并入任务 + 元数据 */
 class FungiGuideDb extends Dexie {
   records!: Table<FungusRecord, string>
   spores!: Table<SporePrint, string>
   points!: Table<CollectPoint, string>
   identifies!: Table<IdentifyLog, string>
+  fieldNotes!: Table<FieldNote, string>
+  fieldSpores!: Table<FieldSporePrint, string>
+  fieldIdentifies!: Table<FieldIdentifyLog, string>
+  mergeJobs!: Table<MergeJob, string>
   meta!: Table<MetaRow, string>
 
   constructor() {
@@ -29,7 +43,7 @@ class FungiGuideDb extends Dexie {
       meta: 'key'
     })
     // v2：新增「菌肉变色反应」字段，迁移时为历史条目补齐默认值（不变色）
-    this.version(SCHEMA_VERSION)
+    this.version(2)
       .stores({
         records: 'id, code, pointId, attachment, capShape',
         spores: 'id, recordId, color, observeDate',
@@ -46,6 +60,47 @@ class FungiGuideDb extends Dexie {
               record.fleshReaction = '不变色'
             }
           })
+      })
+    // v3：外业手记（临时号）及其孢子印/鉴定结论 + 并入任务；采集点增加正式编号前缀 code
+    this.version(SCHEMA_VERSION)
+      .stores({
+        records: 'id, code, pointId, attachment, capShape',
+        spores: 'id, recordId, color, observeDate',
+        points: 'id, code, name, substrate, vegetation',
+        identifies: 'id, recordId, conclusion, date',
+        fieldNotes: 'id, tempCode, pointId, status, collectDate, jobId',
+        fieldSpores: 'id, noteId',
+        fieldIdentifies: 'id, noteId',
+        mergeJobs: 'id, status, queueOrder',
+        meta: 'key'
+      })
+      .upgrade(async (tx) => {
+        // 为历史采集点补齐编号前缀：优先从其条目正式号 BHS-2026-001 反解，否则回退 PT+序号
+        const pointsTable = tx.table<CollectPoint, string>('points')
+        const recordsTable = tx.table<FungusRecord, string>('records')
+        const records = await recordsTable.toArray()
+        const prefixByPoint = new Map<string, string>()
+        const used = new Set<string>()
+        for (const record of records) {
+          const parsed = parseFormalCode(record.code)
+          if (parsed) {
+            prefixByPoint.set(record.pointId, parsed.pointCode)
+            used.add(parsed.pointCode)
+          }
+        }
+        const points = await pointsTable.toArray()
+        let fallbackSeq = 1
+        points.forEach((point) => {
+          let code = prefixByPoint.get(point.id)
+          if (!code) {
+            do {
+              code = `PT${fallbackSeq++}`
+            } while (used.has(code))
+          }
+          used.add(code)
+          point.code = code
+        })
+        await pointsTable.bulkPut(points)
       })
   }
 }
@@ -92,6 +147,7 @@ export async function seedDemoData(): Promise<void> {
   await db.points.bulkPut([
     {
       id: 'pt_bhs',
+      code: 'BHS',
       name: '百花山栎树林样线',
       longitude: 115.6218,
       latitude: 39.8152,
@@ -104,6 +160,7 @@ export async function seedDemoData(): Promise<void> {
     },
     {
       id: 'pt_yls',
+      code: 'YLS',
       name: '云龙山腐木沟',
       longitude: 117.2841,
       latitude: 34.2615,
@@ -245,6 +302,124 @@ export async function seedDemoData(): Promise<void> {
       needReview: false,
       reviewer: '祁野',
       date: today
+    }
+  ])
+
+  // 外业手记：条目只有临时编号，孢子印与鉴定结论都挂在临时号上，等待并入换号
+  await db.fieldNotes.bulkPut([
+    {
+      id: 'fnt_001',
+      tempCode: 'TMP-0001',
+      tempName: '松林小灰伞（暂定）',
+      fruitBodyCount: 4,
+      pointId: 'pt_bhs',
+      capDiameter: 3.6,
+      capShape: '钟形',
+      capMargin: '全缘',
+      capTexture: '光滑',
+      fleshThickness: 0.5,
+      fleshReaction: '不变色',
+      attachment: '离生',
+      gillDensity: '密集',
+      stipeLength: 6.1,
+      stipeDiameter: 0.7,
+      ring: '易脱落',
+      volva: '无菌托',
+      odor: '无明显气味',
+      hostTree: '油松',
+      collectDate: '2026-08-12',
+      collector: '沈禾',
+      note: '外业临时记录，待换正式号',
+      status: 'pending',
+      createdAt: today
+    },
+    {
+      id: 'fnt_002',
+      tempCode: 'TMP-0002',
+      tempName: '栎树根牛肝菌（暂定）',
+      fruitBodyCount: 2,
+      pointId: 'pt_bhs',
+      capDiameter: 8.2,
+      capShape: '半球形',
+      capMargin: '全缘',
+      capTexture: '粘滑',
+      fleshThickness: 1.9,
+      fleshReaction: '迅速变蓝',
+      attachment: '直生',
+      gillDensity: '中等',
+      stipeLength: 7.0,
+      stipeDiameter: 2.0,
+      ring: '无菌环',
+      volva: '无菌托',
+      odor: '菌香',
+      hostTree: '辽东栎',
+      collectDate: '2026-08-05',
+      collector: '沈禾',
+      note: '伤变蓝明显',
+      status: 'pending',
+      createdAt: today
+    },
+    {
+      id: 'fnt_003',
+      tempCode: 'TMP-0003',
+      tempName: '腐木白韧革（暂定）',
+      fruitBodyCount: 5,
+      pointId: 'pt_yls',
+      capDiameter: 6.4,
+      capShape: '平展',
+      capMargin: '附着菌幕残片',
+      capTexture: '绒状',
+      fleshThickness: 0.8,
+      fleshReaction: '不变色',
+      attachment: '延生',
+      gillDensity: '稀疏',
+      stipeLength: 2.1,
+      stipeDiameter: 2.8,
+      ring: '无菌环',
+      volva: '无菌托',
+      odor: '淡土腥',
+      hostTree: '枫香',
+      collectDate: '2026-09-01',
+      collector: '祁野',
+      note: '覆瓦状群生',
+      status: 'pending',
+      createdAt: today
+    }
+  ])
+
+  await db.fieldSpores.bulkPut([
+    {
+      id: 'fsp_001',
+      noteId: 'fnt_001',
+      color: '奶油色',
+      shape: '圆形薄印',
+      hours: 6,
+      observeDate: '2026-08-12',
+      moisture: '新鲜样本'
+    },
+    {
+      id: 'fsp_002',
+      noteId: 'fnt_002',
+      color: '淡黄',
+      shape: '印层较厚',
+      hours: 10,
+      observeDate: '2026-08-06',
+      moisture: '湿度大'
+    }
+  ])
+
+  await db.fieldIdentifies.bulkPut([
+    {
+      id: 'fid_001',
+      noteId: 'fnt_002',
+      conclusion: 'Boletus separans?',
+      basis: '形态特征',
+      referenceBook: '《中国大型真菌》',
+      referencePage: 'P.318',
+      confidence: '低',
+      needReview: true,
+      reviewer: '祁野',
+      date: '2026-08-10'
     }
   ])
 }

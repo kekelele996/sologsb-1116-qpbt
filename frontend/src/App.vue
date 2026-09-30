@@ -6,15 +6,20 @@ import { recordStore } from '@/stores/recordStore'
 import { sporeStore } from '@/stores/sporeStore'
 import { pointStore } from '@/stores/pointStore'
 import { identifyStore } from '@/stores/identifyStore'
+import { fieldStore } from '@/stores/fieldStore'
+import { mergeJobStore } from '@/stores/mergeStore'
 
 const route = useRoute()
 const recordState = useStore(recordStore)
 const sporeState = useStore(sporeStore)
 const pointState = useStore(pointStore)
 const identifyState = useStore(identifyStore)
+const fieldState = useStore(fieldStore)
+const jobState = useStore(mergeJobStore)
 
 const menus = [
   { path: '/atlas', label: '图谱总览', icon: 'Grid' },
+  { path: '/field', label: '外业手记并入', icon: 'Promotion' },
   { path: '/points', label: '采集点管理', icon: 'Location' },
   { path: '/identify', label: '鉴定工作页', icon: 'Search' },
   { path: '/compare', label: '条目对比', icon: 'Files' }
@@ -26,7 +31,9 @@ const stats = computed(() => [
   { label: '条目', value: recordState.records.length },
   { label: '孢子印', value: sporeState.spores.length },
   { label: '采集点', value: pointState.points.length },
-  { label: '鉴定留痕', value: identifyState.logs.length }
+  { label: '鉴定留痕', value: identifyState.logs.length },
+  { label: '待并手记', value: fieldState.notes.filter((n) => n.status === 'pending').length },
+  { label: '并入批次', value: jobState.jobs.filter((j) => ['held', 'queued', 'running', 'partial'].includes(j.status)).length }
 ])
 
 onMounted(async () => {
@@ -34,6 +41,8 @@ onMounted(async () => {
   await sporeStore.getState().hydrate()
   await pointStore.getState().hydrate()
   await identifyStore.getState().hydrate()
+  await fieldStore.getState().hydrate()
+  await mergeJobStore.getState().hydrate()
 })
 </script>
 

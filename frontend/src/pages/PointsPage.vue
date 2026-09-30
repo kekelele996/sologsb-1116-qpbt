@@ -7,6 +7,7 @@ import { useStore } from '@/hooks/usePersistentStore'
 import { pointStore } from '@/stores/pointStore'
 import { recordStore } from '@/stores/recordStore'
 import { uid } from '@/utils/id'
+import { POINT_CODE_RE } from '@/utils/renumber'
 
 const pointState = useStore(pointStore)
 const recordState = useStore(recordStore)
@@ -14,6 +15,7 @@ const recordState = useStore(recordStore)
 const editingId = ref<string | null>(null)
 const draft = reactive<CollectPoint>({
   id: '',
+  code: '',
   name: '',
   longitude: 116.4,
   latitude: 39.9,
@@ -23,6 +25,17 @@ const draft = reactive<CollectPoint>({
   companionTrees: '',
   collectDate: new Date().toISOString().slice(0, 10),
   collector: ''
+})
+
+const codeError = computed<string | null>(() => {
+  const code = draft.code.trim().toUpperCase()
+  if (!code) return '请填写采集点编号前缀（正式号格式：前缀-年份-序号）'
+  if (!POINT_CODE_RE.test(code)) return '编号仅支持 1~8 位字母或数字，如 BHS'
+  const duplicated = pointState.points.some(
+    (point) => point.code.toUpperCase() === code && point.id !== editingId.value
+  )
+  if (duplicated) return '该编号前缀已被其他采集点占用'
+  return null
 })
 
 const coordError = computed<string | null>(() => {
@@ -45,6 +58,7 @@ watch(
 function resetDraft(): void {
   editingId.value = null
   draft.id = ''
+  draft.code = ''
   draft.name = ''
   draft.longitude = 116.4
   draft.latitude = 39.9
@@ -66,6 +80,10 @@ async function submit(): Promise<void> {
     ElMessage.warning('请填写采集点名称')
     return
   }
+  if (codeError.value) {
+    ElMessage.warning(codeError.value)
+    return
+  }
   if (coordError.value) {
     ElMessage.warning(coordError.value)
     return
@@ -73,6 +91,7 @@ async function submit(): Promise<void> {
   const row: CollectPoint = {
     ...draft,
     id: editingId.value ?? uid('pt'),
+    code: draft.code.trim().toUpperCase(),
     name: draft.name.trim(),
     companionTrees: draft.companionTrees.trim(),
     collector: draft.collector.trim()
@@ -130,7 +149,10 @@ async function remove(point: CollectPoint): Promise<void> {
       <el-card v-for="point in pointState.points" :key="point.id" shadow="hover" class="point-card">
         <div class="point-head">
           <div>
-            <div class="point-name">{{ point.name }}</div>
+            <div class="point-name">
+              <el-tag size="small" effect="dark" class="code-tag">{{ point.code }}</el-tag>
+              {{ point.name }}
+            </div>
             <div class="muted">
               {{ point.longitude.toFixed(4) }}, {{ point.latitude.toFixed(4) }} · {{ point.altitude }} m
             </div>
@@ -174,6 +196,9 @@ async function remove(point: CollectPoint): Promise<void> {
 .point-name {
   font-size: 15px;
   font-weight: 600;
+}
+.code-tag {
+  margin-right: 6px;
 }
 .desc {
   margin-bottom: 10px;

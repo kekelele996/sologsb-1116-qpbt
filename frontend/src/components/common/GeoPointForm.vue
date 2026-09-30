@@ -32,6 +32,15 @@ const coordError = computed<string | null>(() => {
   <div class="geo-form">
     <div class="grid">
       <label class="cell">
+        <span class="lab">采集点编号前缀</span>
+        <el-input
+          :model-value="modelValue.code"
+          :disabled="disabled"
+          placeholder="如 BHS"
+          @update:model-value="(value: string) => patch({ code: value.toUpperCase() })"
+        />
+      </label>
+      <label class="cell">
         <span class="lab">采集点名称</span>
         <el-input
           :model-value="modelValue.name"

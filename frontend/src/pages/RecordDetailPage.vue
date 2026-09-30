@@ -44,6 +44,7 @@ const sporeForm = reactive({
 
 const pointDraft = reactive<CollectPoint>({
   id: '',
+  code: '',
   name: '',
   longitude: 0,
   latitude: 0,

@@ -9,6 +9,8 @@ export type Substrate = (typeof SUBSTRATES)[number]
 /** CollectPoint 采集点 */
 export interface CollectPoint {
   id: string
+  /** 采集点正式编号前缀（如 BHS），正式采集号 = 前缀-年份-序号 */
+  code: string
   name: string
   longitude: number
   latitude: number
